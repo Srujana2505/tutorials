@@ -67,8 +67,8 @@ built-in F1 score calculation helper function.
 
 .. code:: shell
 
-   pip install sklearn
-   pip install transformers==4.29.2
+   pip install scikit-learn
+   pip install transformers
 
 
 Because we will be using the beta parts of the PyTorch, it is
@@ -390,9 +390,6 @@ We reuse the tokenize and evaluation function from `Huggingface <https://github.
                                                     label_list=label_list,
                                                     max_length=args.max_seq_length,
                                                     output_mode=output_mode,
-                                                    pad_on_left=bool(args.model_type in ['xlnet']),                 # pad on the left for xlnet
-                                                    pad_token=tokenizer.convert_tokens_to_ids([tokenizer.pad_token])[0],
-                                                    pad_token_segment_id=4 if args.model_type in ['xlnet'] else 0,
             )
             if args.local_rank in [-1, 0]:
                 logger.info("Saving features into cached file %s", cached_features_file)
@@ -525,11 +522,31 @@ We can serialize and save the quantized model for the future use using
 
 .. code:: python
 
+    import random 
+    global_rng = random.Random()
+
+    def ids_tensor(shape, vocab_size, rng=None):
+        #  Creates a random int32 tensor of the shape within the vocab size
+        if rng is None:
+            rng = global_rng
+
+        total_dims = 1
+        for dim in shape:
+            total_dims *= dim
+
+        values = []
+        for _ in range(total_dims):
+            values.append(rng.randint(0, vocab_size - 1))
+
+        return torch.tensor(data=values, dtype=torch.long, device='cpu').view(shape).contiguous()
+
+.. code:: python
+
     input_ids = ids_tensor([8, 128], 2)
     token_type_ids = ids_tensor([8, 128], 2)
     attention_mask = ids_tensor([8, 128], vocab_size=2)
     dummy_input = (input_ids, attention_mask, token_type_ids)
-    traced_model = torch.jit.trace(quantized_model, dummy_input)
+    traced_model = torch.jit.trace(quantized_model, dummy_input, strict=False)
     torch.jit.save(traced_model, "bert_traced_eager_quant.pt")
 
 To load the quantized model, we can use `torch.jit.load`
